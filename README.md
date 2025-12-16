@@ -45,6 +45,7 @@ gcc sysmonitor.c -o sysmonitor
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <ctype.h>
 ```
 
 #### Global Variables
