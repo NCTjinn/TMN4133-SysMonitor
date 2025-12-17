@@ -159,35 +159,57 @@ Usage:         50.0%
 ```c
 void listTopProcesses();
 ```
+#### Helper Functions
+```c
+int isNumeric(const char *str);
+int readProcessName(int pid, char *name, size_t name_size);
+int readProcessStat(int pid, unsigned long *utime, unsigned long *stime);
+int compareProcesses(const void *a, const void *b);
+```
+#### Data Structure
+```c
+struct ProcessInfo {
+    int pid;
+    char name[256];
+    unsigned long utime;       // User mode CPU time
+    unsigned long stime;       // Kernel mode CPU time
+    unsigned long total_time;  // Total CPU time (utime + stime)
+    double cpu_percent;        // Relative percentage
+};
+```
 
 #### Implementation Details
 1. **Traverse `/proc` Directory**:
-   - Use `opendir()`, `readdir()`, `closedir()`
-   - Identify numeric directories (PIDs)
+   - Use opendir(), readdir(), closedir()
+   - Identify numeric directories (PIDs) using helper function isNumeric()
+   - Collect up to 1024 processes in struct ProcessInfo array
 
 2. **Read Process Information**:
-   - For each PID, read `/proc/[PID]/stat`
-   - Read `/proc/[PID]/comm` for process name
+   - For each PID, read /proc/[PID]/stat using readProcessStat() helper
+   - Read /proc/[PID]/comm for process name using readProcessName() helper
    - Extract CPU time: utime + stime (fields 14 and 15 in stat)
+   - Store in struct ProcessInfo with pid, name, utime, stime, total_time
 
 3. **Calculate CPU Usage per Process**:
-   - Sort processes by CPU time
+   - Sort processes by total CPU time using qsort() with compareProcesses() helper
+   - Calculate relative percentages (top process = 100%, others relative to it)
+   - Formula: cpu_percent = (100.0 * process_total_time) / max_total_time
    - Select top 5 processes
 
 4. **Display Format**:
 ```
 === Top 5 Active Processes ===
-PID      Process Name       CPU Usage
----------------------------------------
-1234     chrome             15.3%
-5678     firefox            12.8%
-9012     code               8.5%
-3456     systemd            5.2%
-7890     bash               2.1%
+PID        Process Name                   CPU Time        Relative %
+=======================================================================
+1234       chrome                         1523456         100.00%
+5678       firefox                        1245789         81.78%
+9012       code                           987654          64.83%
+3456       systemd                        856234          56.20%
+7890       bash                           645123          42.35%
 ```
 
 5. **Logging**:
-   - Write to `syslog.txt`: `[TIMESTAMP] Top Process: PID=1234, Name=chrome, CPU=15.3%`
+   - Write to syslog.txt: [TIMESTAMP] Top 5 processes displayed: Top process PID=1234 (chrome) with 1523456 CPU time
 
 #### Files in `/proc` to Access
 - `/proc/[PID]/stat`
@@ -197,7 +219,8 @@ PID      Process Name       CPU Usage
 - Skip PIDs that cannot be read (process may have ended)
 - Handle permission errors gracefully
 - Validate that PID directories are numeric
-
+- Use "[unknown]" if process name cannot be read
+- Display error message if /proc directory cannot be opened
 ---
 
 ### **Contributor 4: Continuous Monitoring & Main Control**
