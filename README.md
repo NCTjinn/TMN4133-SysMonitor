@@ -105,13 +105,13 @@ Usage:         57.3%
 ### Top 5 Processes Output
 ```
 === Top 5 Active Processes ===
-PID        Process Name                   CPU Time        Relative %
+PID        Process Name                   CPU Time        CPU %
 =======================================================================
-1234       chrome                         1523456         100.00%
-5678       firefox                        1234567         81.03%
-9012       systemd                        987654          64.83%
-3456       gnome-shell                    876543          57.54%
-7890       Xorg                           765432          50.24%
+1234       chrome                         1523456         15.23%
+5678       firefox                        1234567         12.35%
+9012       systemd                        987654          9.88%
+3456       gnome-shell                    876543          8.77%
+7890       Xorg                           765432          7.65%
 ```
 
 ### Interactive Menu
@@ -151,7 +151,7 @@ PID        Process Name                   CPU Time        Relative %
 [2025-12-19 15:28:12] Session started
 [2025-12-19 15:28:15] CPU Usage: 23.4%
 [2025-12-19 15:28:18] Memory - Total: 7892MB, Used: 4523MB, Free: 3369MB (57.3%)
-[2025-12-19 15:28:22] Top 5 processes displayed: Top process PID=1234 (chrome) with 1523456 CPU time
+[2025-12-19 15:28:22] Top 5 processes displayed: Top process PID=1234 (chrome) with 1523456 CPU time (15.23%)
 [2025-12-19 15:30:45] Continuous monitoring started
 [2025-12-19 15:35:12] SIGINT received
 [2025-12-19 15:35:12] Session ended
@@ -249,9 +249,20 @@ PID        Process Name                   CPU Time        Relative %
 1. Scans `/proc` directory for numeric entries (PIDs)
 2. Reads process name from `/proc/[PID]/comm`
 3. Reads CPU time from `/proc/[PID]/stat` (utime + stime)
-4. Stores process information in array
-5. Sorts processes by total CPU time (descending)
-6. Displays top 5 with relative CPU percentages
+4. Reads total system CPU time from `/proc/stat`
+5. Stores process information in array
+6. Sorts processes by total CPU time (descending)
+7. Calculates CPU percentage relative to total system CPU time
+8. Displays top 5 with actual CPU percentages
+
+#### CPU Percentage Calculation
+The module calculates CPU percentage using the formula:
+CPU % = (Process CPU Time / Total System CPU Time) × 100
+Where:
+- **Process CPU Time** = utime + stime (from `/proc/[PID]/stat`)
+- **Total System CPU Time** = sum of all CPU time fields from `/proc/stat` (user + nice + system + idle + iowait + irq + softirq)
+
+This provides an accurate representation of each process's share of total system CPU resources since boot. The percentages represent cumulative CPU consumption, not instantaneous usage.
 
 #### Data Structure
 
@@ -262,7 +273,7 @@ struct ProcessInfo {
     unsigned long utime;       // User mode CPU time
     unsigned long stime;       // Kernel mode CPU time
     unsigned long total_time;  // Total CPU time
-    double cpu_percent;        // Relative percentage
+    double cpu_percent;        // CPU percentage (relative to total system CPU)
 };
 ```
 
@@ -283,7 +294,13 @@ struct ProcessInfo {
 - Parses fields 14 (utime) and 15 (stime)
 - Handles process name with spaces using parenthesis parsing
 - Returns 0 on success, -1 on failure
-
+  
+**`unsigned long long getTotalCPUTime()`**
+- Reads total system CPU time from `/proc/stat`
+- Sums all CPU time fields (user, nice, system, idle, iowait, irq, softirq)
+- Returns total CPU time in clock ticks
+- Returns 0 on error
+  
 **`int compareProcesses(const void *a, const void *b)`**
 - Comparison function for `qsort()`
 - Sorts processes by total_time in descending order
@@ -292,10 +309,21 @@ struct ProcessInfo {
 **`void listTopProcesses()`**
 - Main entry point for process monitoring
 - Opens `/proc` directory and scans for processes
+- Retrieves total system CPU time for percentage calculation
 - Collects up to 1024 process entries
 - Sorts and displays top 5 processes
-- Calculates relative CPU percentages
-- Logs summary to syslog.txt
+- Calculates CPU percentages relative to total system CPU
+- Logs summary with CPU percentage to syslog.txt
+
+#### Understanding the Output
+
+The **CPU %** column shows:
+- What percentage of total system CPU time each process has consumed since it started
+- Example: A process showing 15.23% has used 15.23% of all available CPU time across all cores since boot
+- The sum of all processes' CPU percentages will approach 100% (the total system CPU capacity)
+- This is different from instantaneous CPU usage, which would require delta calculations over time
+
+**Note**: These are cumulative percentages representing lifetime CPU consumption, not current/instantaneous CPU usage rates.
 
 ---
 
@@ -370,6 +398,7 @@ sysmonitor.c
 │   ├── isNumeric()
 │   ├── readProcessName()
 │   ├── readProcessStat()
+│   ├── getTotalCPUTime()
 │   ├── compareProcesses()
 │   └── listTopProcesses()
 │
@@ -404,6 +433,8 @@ watch -n 1 'echo "SysMonitor++:"; ./sysmonitor -m cpu; echo ""; echo "System:"; 
 2. **Process Scanning**: Scanning all PIDs can be intensive on systems with many processes
 3. **Continuous Mode**: Lower intervals (<1 second) may impact system performance
 4. **File I/O**: All operations use low-level system calls for efficiency
+5. **CPU Percentage Calculation**: Reads `/proc/stat` in addition to individual process stats
+
 
 ### Troubleshooting
 
@@ -418,6 +449,9 @@ watch -n 1 'echo "SysMonitor++:"; ./sysmonitor -m cpu; echo ""; echo "System:"; 
 
 **Problem**: Cannot write to syslog.txt  
 **Solution**: Check write permissions in the current directory.
+
+*Problem**: Process CPU percentages seem low or don't add up to 100%  
+**Solution**: The percentages shown are cumulative lifetime usage, not instantaneous rates. Newly started processes will show lower percentages even if currently CPU-intensive.
 
 ---
 
@@ -449,7 +483,7 @@ This project is developed for educational purposes as part of the TMN4133 course
 - Directory Operations: `man 3 opendir`, `man 3 readdir`
 - Signal Handling: `man 2 signal`
 - Time Functions: `man 2 time`, `man 3 strftime`
-
+- Process Statistics: `man 5 proc` (for `/proc/[pid]/stat` format)
 ---
 
 **Last Updated**: 19 December 2025
