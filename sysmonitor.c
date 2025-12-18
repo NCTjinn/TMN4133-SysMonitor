@@ -2,12 +2,11 @@
  * SysMonitor++ - System Monitoring Tool
  * A command-line system monitoring tool using Linux system calls and /proc filesystem
  * 
- * Contributors:
- * - Contributor 1: CPU Usage Module [IMPLEMENTED]
- * - Contributor 2: Memory Usage Module [TODO]
- * - Contributor 3: Top Processes Module [IMPLEMENTED]
- * - Contributor 4: Main Control & Continuous Monitoring [IMPLEMENTED]
-
+ * Modules:
+ * - CPU Usage Module
+ * - Memory Usage Module
+ * - Top Processes Module
+ * - Main Control & Continuous Monitoring
  */
 
 #include <stdio.h>
@@ -229,10 +228,6 @@ void getCPUUsage() {
     }
 
     if (cpu_usage < 0) {
-        // printf("\n=== CPU Usage ===\n");
-        // printf("Initializing CPU monitoring...\n");
-        // printf("Run again to see CPU usage.\n\n");
-        // writeLog("CPU monitoring initialized");
         return;
     }
     
