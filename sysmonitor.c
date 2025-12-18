@@ -428,6 +428,43 @@ int readProcessStat(int pid, unsigned long *utime, unsigned long *stime) {
 }
 
 /**
+ * getTotalCPUTime - Read total CPU time from /proc/stat
+ */
+unsigned long long getTotalCPUTime() {
+    int fd;
+    char buffer[4096];
+    ssize_t bytes_read;
+    
+    fd = open("/proc/stat", O_RDONLY);
+    if (fd == -1) {
+        return 0;
+    }
+    
+    bytes_read = read(fd, buffer, sizeof(buffer) - 1);
+    close(fd);
+    
+    if (bytes_read <= 0) {
+        return 0;
+    }
+    
+    buffer[bytes_read] = '\0';
+    
+    // Parse first line: cpu user nice system idle iowait irq softirq...
+    unsigned long long user, nice, system, idle, iowait, irq, softirq;
+    const char *line = strstr(buffer, "cpu ");
+    if (!line) {
+        return 0;
+    }
+    
+    if (sscanf(line, "cpu %llu %llu %llu %llu %llu %llu %llu",
+               &user, &nice, &system, &idle, &iowait, &irq, &softirq) != 7) {
+        return 0;
+    }
+    
+    return user + nice + system + idle + iowait + irq + softirq;
+}
+
+/**
  * compareProcesses - Comparison function for qsort (descending order by CPU time)
  */
 int compareProcesses(const void *a, const void *b) {
@@ -452,6 +489,14 @@ void listTopProcesses() {
     int process_count = 0;
     
     printf("\n=== Top 5 Active Processes ===\n");
+    
+    // Get total system CPU time
+    unsigned long long total_cpu_time = getTotalCPUTime();
+    if (total_cpu_time == 0) {
+        printf("Error: Could not read total CPU time\n");
+        writeLog("Error: Could not read total CPU time");
+        return;
+    }
     
     // Open /proc directory
     proc_dir = opendir("/proc");
@@ -504,16 +549,15 @@ void listTopProcesses() {
     // Sort processes by total CPU time (descending)
     qsort(processes, process_count, sizeof(struct ProcessInfo), compareProcesses);
     
-    // Calculate CPU percentages (relative to top process)
-    unsigned long max_time = processes[0].total_time;
-    if (max_time > 0) {
+    // Calculate CPU percentages relative to total system CPU time
+    if (total_cpu_time > 0) {
         for (int i = 0; i < process_count; i++) {
-            processes[i].cpu_percent = (100.0 * processes[i].total_time) / max_time;
+            processes[i].cpu_percent = (100.0 * processes[i].total_time) / total_cpu_time;
         }
     }
     
     // Display header
-    printf("%-10s %-30s %-15s %-10s\n", "PID", "Process Name", "CPU Time", "Relative %");
+    printf("%-10s %-30s %-15s %-10s\n", "PID", "Process Name", "CPU Time", "CPU %");
     printf("=======================================================================\n");
     
     // Display top 5 processes
@@ -530,8 +574,8 @@ void listTopProcesses() {
     // Log the results
     char log_msg[512];
     snprintf(log_msg, sizeof(log_msg), 
-             "Top 5 processes displayed: Top process PID=%d (%s) with %lu CPU time",
-             processes[0].pid, processes[0].name, processes[0].total_time);
+             "Top 5 processes displayed: Top process PID=%d (%s) with %lu CPU time (%.2f%%)",
+             processes[0].pid, processes[0].name, processes[0].total_time, processes[0].cpu_percent);
     writeLog(log_msg);
 }
 
