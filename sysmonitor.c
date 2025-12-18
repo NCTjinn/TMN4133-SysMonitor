@@ -241,7 +241,7 @@ void getCPUUsage() {
  * Responsibility: Implement memory monitoring functionality
  * - Reads /proc/meminfo using system calls
  * - Calculates Total, Used, and Free memory
- * - Displays formatted output and logs to syslog.txt
+ * - Displays formatted output and logs to syslog.txt 
  */
 
 void getMemoryUsage() {
