@@ -187,6 +187,8 @@ double calculateCPUUsage(unsigned long long user, unsigned long long nice,
  * getCPUUsage - Read CPU statistics and display usage percentage
  */
 void getCPUUsage() {
+    static int first_call = 1;  // Track first call in this execution
+
     int fd;
     char buffer[4096];
     ssize_t bytes_read;
@@ -217,12 +219,20 @@ void getCPUUsage() {
     }
     
     double cpu_usage = calculateCPUUsage(user, nice, system, idle, iowait, irq, softirq);
-    
+
+    // On first call of this execution, always skip display
+    if (first_call) {
+        first_call = 0;
+        sleep(1); // Sleep to allow delta calculation on next call
+        getCPUUsage(); // Call again to get valid reading
+        return;
+    }
+
     if (cpu_usage < 0) {
-        printf("\n=== CPU Usage ===\n");
-        printf("Initializing CPU monitoring...\n");
-        printf("Run again to see CPU usage.\n\n");
-        writeLog("CPU monitoring initialized");
+        // printf("\n=== CPU Usage ===\n");
+        // printf("Initializing CPU monitoring...\n");
+        // printf("Run again to see CPU usage.\n\n");
+        // writeLog("CPU monitoring initialized");
         return;
     }
     
@@ -632,8 +642,6 @@ int main(int argc, char *argv[]) {
     else if (argc == 3 && strcmp(argv[1], "-m") == 0){
 	if (strcmp(argv[2], "cpu") == 0) {
 		getCPUUsage();
-		sleep(1);
-		getCPUUsage();
 	}
 	else if (strcmp(argv[2], "mem") == 0) {
 		getMemoryUsage();
@@ -669,20 +677,3 @@ int main(int argc, char *argv[]) {
 
 	return 0;
 }
-
-/*
- * COMPILATION AND TESTING:
- * 
- * Compile:
- *   gcc sysmonitor.c -o sysmonitor
- * 
- * Test CPU module:
- *   ./sysmonitor           # Default test mode
- *   ./sysmonitor -m cpu    # CPU mode
- *   ./sysmonitor -h        # Help
- * 
- * Check logs:
- *   cat syslog.txt
- * 
- * Contributors 2, 3, 4: Replace your respective stub functions with full implementations
- */
